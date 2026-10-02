@@ -39,13 +39,21 @@ def read_ply(file) -> Union[torch.Tensor, Dict[str, torch.Tensor]]:
     coord = np.round(xyz).astype(int)
     coord = torch.from_numpy(coord)
     
-    attr_keys = [k for k in plydata.elements[0].data.dtype.names if k not in ['x', 'y', 'z']]
-    attr_names = ['_'.join(k.split('_')[:-1]) for k in attr_keys]
-    attr_chs = [sum([1 for k in attr_keys if k.startswith(f'{name}_')]) for name in attr_names]
+    attr_channels = {}
+    for key in plydata.elements[0].data.dtype.names:
+        if key in ('x', 'y', 'z'):
+            continue
+        name, channel = key.rsplit('_', 1)
+        attr_channels.setdefault(name, {})[int(channel)] = key
 
     attr = {}
-    for i, name in enumerate(attr_names):
-        attr[name] = np.stack([plydata.elements[0][f'{name}_{j}'] for j in range(attr_chs[i])], axis=1)
+    for name, channels in attr_channels.items():
+        expected = list(range(len(channels)))
+        if sorted(channels) != expected:
+            raise ValueError(f"Non-contiguous channels for attribute {name}")
+        attr[name] = np.stack(
+            [plydata.elements[0][channels[channel]] for channel in expected], axis=1
+        )
     attr = {k: torch.from_numpy(v) for k, v in attr.items()}
     
     return coord, attr
