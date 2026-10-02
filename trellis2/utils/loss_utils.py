@@ -6,9 +6,7 @@ from lpips import LPIPS
 
 
 def smooth_l1_loss(pred, target, beta=1.0):
-    diff = torch.abs(pred - target)
-    loss = torch.where(diff < beta, 0.5 * diff ** 2 / beta, diff - 0.5 * beta)
-    return loss.mean()
+    return F.smooth_l1_loss(pred, target, beta=beta)
 
 
 def l1_loss(network_output, gt):
