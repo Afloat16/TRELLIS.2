@@ -18,103 +18,26 @@ def read_ply(filename):
         tris (np.ndarray): Array of shape [M, 3] containing triangle face indices (empty if none).
         quads (np.ndarray): Array of shape [K, 4] containing quad face indices (empty if none).
     """
-    with open(filename, 'rb') as f:
-        # Read the header until 'end_header' is encountered
-        header_bytes = b""
-        while True:
-            line = f.readline()
-            if not line:
-                raise ValueError("PLY header not found")
-            header_bytes += line
-            if b"end_header" in line:
-                break
-        header = header_bytes.decode('utf-8')
-        
-        # Determine if the file is in ASCII or binary format
-        is_ascii = "ascii" in header
-        
-        # Extract the number of vertices and faces from the header using regex
-        vertex_match = re.search(r'element vertex (\d+)', header)
-        if vertex_match:
-            num_vertices = int(vertex_match.group(1))
-        else:
-            raise ValueError("Vertex count not found in header")
-            
-        face_match = re.search(r'element face (\d+)', header)
-        if face_match:
-            num_faces = int(face_match.group(1))
-        else:
-            raise ValueError("Face count not found in header")
-        
-        vertices = []
-        tris = []
-        quads = []
-        
-        if is_ascii:
-            # For ASCII format, read each line of vertex data (each line contains 3 floats)
-            for _ in range(num_vertices):
-                line = f.readline().decode('utf-8').strip()
-                if not line: 
-                    continue
-                parts = line.split()
-                vertices.append([float(parts[0]), float(parts[1]), float(parts[2])])
-            
-            # Read face data, where the first number indicates the number of vertices for the face
-            for _ in range(num_faces):
-                line = f.readline().decode('utf-8').strip()
-                if not line: 
-                    continue
-                parts = line.split()
-                count = int(parts[0])
-                indices = list(map(int, parts[1:]))
-                if count == 3:
-                    tris.append(indices)
-                elif count == 4:
-                    quads.append(indices)
-                else:
-                    # Skip faces with other numbers of vertices (can be extended as needed)
-                    pass
-        else:
-            # For binary format: read directly from the binary stream
-            # Each vertex consists of 3 floats (12 bytes per vertex)
-            for _ in range(num_vertices):
-                data = f.read(12)
-                if len(data) < 12:
-                    raise ValueError("Insufficient vertex data")
-                v = struct.unpack('<fff', data)
-                vertices.append(v)
-            
-            # Read face data from the binary stream
-            for _ in range(num_faces):
-                # First, read 1 byte indicating the number of vertices in the face
-                count_data = f.read(1)
-                if len(count_data) < 1:
-                    raise ValueError("Failed to read face vertex count")
-                count = struct.unpack('<B', count_data)[0]
-                if count == 3:
-                    data = f.read(12)  # 3 * 4 bytes
-                    if len(data) < 12:
-                        raise ValueError("Insufficient data for triangle face")
-                    indices = struct.unpack('<3i', data)
-                    tris.append(indices)
-                elif count == 4:
-                    data = f.read(16)  # 4 * 4 bytes
-                    if len(data) < 16:
-                        raise ValueError("Insufficient data for quad face")
-                    indices = struct.unpack('<4i', data)
-                    quads.append(indices)
-                else:
-                    # For faces with a different number of vertices, read count*4 bytes
-                    data = f.read(count * 4)
-                    # Skip or extend processing as needed
-                    raise ValueError(f"Unsupported face with {count} vertices")
-        
-        # Convert lists to torch.Tensor
-        vertices = np.array(vertices, dtype=np.float32)
-        tris = np.array(tris, dtype=np.int32) if len(tris) > 0 else np.empty((0, 3), dtype=np.int32)
-        quads = np.array(quads, dtype=np.int32) if len(quads) > 0 else np.empty((0, 4), dtype=np.int32)
-        
-        return vertices, tris, quads
+    ply_data = PlyData.read(filename)
+    vertex_data = ply_data['vertex'].data
+    vertices = np.stack([vertex_data[key] for key in ('x', 'y', 'z')], axis=1)
+    vertices = vertices.astype(np.float32, copy=False)
+    face_data = ply_data['face'].data
+    index_key = next(
+        (key for key in ('vertex_indices', 'vertex_index') if key in face_data.dtype.names),
+        None,
+    )
+    if index_key is None:
+        raise ValueError("Face vertex indices not found in PLY properties")
+    tris, quads = [], []
+    for indices in face_data[index_key]:
+        if len(indices) == 3:
+            tris.append(indices)
+        elif len(indices) == 4:
+            quads.append(indices)
+    tris = np.asarray(tris, dtype=np.int32).reshape(-1, 3)
+    quads = np.asarray(quads, dtype=np.int32).reshape(-1, 4)
+    return vertices, tris, quads
 
 
 def write_ply(
