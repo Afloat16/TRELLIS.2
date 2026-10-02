@@ -210,11 +210,10 @@ class BalancedResumableSampler(ResumableSampler):
         assert len(indices) == self.total_size
 
         # balance load among processes
-        num_batches = len(indices) // (self.batch_size * self.world_size)
+        global_batch_size = self.batch_size * self.world_size
         balanced_indices = []
-        for i in range(num_batches):
-            start_idx = i * self.batch_size * self.world_size
-            end_idx = (i + 1) * self.batch_size * self.world_size
+        for start_idx in range(0, len(indices), global_batch_size):
+            end_idx = min(start_idx + global_batch_size, len(indices))
             batch_indices = indices[start_idx:end_idx]
             batch_loads = [self.loads[idx] for idx in batch_indices]
             groups = load_balanced_group_indices(batch_loads, self.world_size, equal_size=True)
