@@ -54,6 +54,21 @@ class MeshPlyLayoutTest(unittest.TestCase):
             self.assertEqual(triangles.shape, (0, 3))
             self.assertEqual(quads.shape, (0, 4))
 
+    def test_binary_ngons_remain_rejected_and_ascii_ngons_are_skipped(self):
+        vertices = np.empty(4, dtype=[("x", "f4"), ("y", "f4"), ("z", "f4")])
+        for i, key in enumerate(["x", "y", "z"]):
+            vertices[key] = self.vertices[:, i]
+        faces = np.empty(3, dtype=[("vertex_indices", object)])
+        faces["vertex_indices"] = [self.triangles[0], self.quads[0], np.array([0, 1, 2, 3, 0])]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "mesh.ply"
+            elements = [PlyElement.describe(vertices, "vertex"), PlyElement.describe(faces, "face")]
+            PlyData(elements, text=False).write(path)
+            with self.assertRaisesRegex(ValueError, "Unsupported face with 5 vertices"):
+                mesh_utils.read_ply(path)
+            PlyData(elements, text=True).write(path)
+            self.assert_mesh(mesh_utils.read_ply(path))
+
 
 if __name__ == "__main__":
     unittest.main()

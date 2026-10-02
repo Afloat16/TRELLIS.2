@@ -1,8 +1,6 @@
 from typing import Tuple, Dict
 import numpy as np
 from trimesh import grouping, util, remesh
-import struct
-import re
 from plyfile import PlyData, PlyElement
 
 
@@ -35,6 +33,8 @@ def read_ply(filename):
             tris.append(indices)
         elif len(indices) == 4:
             quads.append(indices)
+        elif not ply_data.text:
+            raise ValueError(f"Unsupported face with {len(indices)} vertices")
     tris = np.asarray(tris, dtype=np.int32).reshape(-1, 3)
     quads = np.asarray(quads, dtype=np.int32).reshape(-1, 4)
     return vertices, tris, quads
